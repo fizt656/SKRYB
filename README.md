@@ -11,6 +11,7 @@ SKRYB uses OpenAI's APIs (Chat Completions and Images) to generate illustrated b
 *   Supports multiple illustration styles defined in `prompts.json` (e.g., Children's Book, Dark Manga/Anime Comic, 70s Cartoon).
 *   Outputs images to a dedicated directory named after the book title.
 *   Generated images are created with a wide aspect ratio (1536x1024), high quality, and include instructions to the AI to ensure images are uncropped and any rendered text is fully visible.
+*   **Future Improvement:** Currently, image consistency across pages is attempted via detailed text prompts. Future work is needed to leverage the OpenAI Images API's edit endpoint (`/v1/images/edits`) to potentially improve character and scene consistency by using the previous page's image as a reference for generating the next.
 
 ## Setup
 
