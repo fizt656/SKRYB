@@ -197,6 +197,7 @@ def generate_image_from_prompt(prompt_text, size="1536x1024", quality="high"):
     }
 
     print(f"\n--- Sending request to OpenAI Images API ---")
+    print(f"Prompt: {prompt_text}") # Added print statement for prompt
     # print(f"DEBUG Image Prompt: {repr(prompt_text)}") # Keep commented out unless needed
 
     try:
@@ -243,6 +244,101 @@ def generate_image_from_prompt(prompt_text, size="1536x1024", quality="high"):
         error_msg = f"An unexpected error occurred during image generation: {e}"
         print(error_msg)
         return None, error_msg
+
+# --- Stage 2: Image Editing ---
+def edit_image_from_prompt(previous_image_data, prompt_text, size="1536x1024", quality="high"):
+    """
+    Edits an image using the OpenAI Images API (gpt-image-1) based on the provided prompt.
+
+    Args:
+        previous_image_data (bytes): The image data of the previous page.
+        prompt_text (str): The detailed text prompt for the image editing.
+        size (str): The desired image size (e.g., "1536x1024", "1024x1024").
+        quality (str): The desired image quality ("low", "medium", "high", "auto").
+
+    Returns:
+        bytes or None: The edited image data as bytes if successful, otherwise None.
+        str or None: An error message if unsuccessful, otherwise None.
+    """
+    if not check_api_key():
+        return None, "API key not configured."
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}"
+    }
+
+    # The /v1/images/edits endpoint requires multipart/form-data
+    # We need to send the image data as a file-like object
+
+    # Create a file-like object from bytes
+    import io
+    image_file = io.BytesIO(previous_image_data)
+    image_file.name = "previous_image.png" # Give it a name, extension might matter
+
+    files = {
+        "image": image_file
+    }
+
+    data = {
+        "model": "gpt-image-1", # Hardcoded for this project
+        "prompt": prompt_text,
+        "n": 1,
+        "size": size,
+        "quality": quality,
+        # "moderation": "low" # Optional: uncomment if needed
+        # "response_format": "b64_json" # REMOVED: Not supported by gpt-image-1
+    }
+
+    print(f"\n--- Sending request to OpenAI Images API (Edit - gpt-image-1) ---")
+    print(f"Prompt: {prompt_text}") # Added print statement for prompt
+    # print(f"DEBUG Edit Prompt: {repr(prompt_text)}") # Keep commented out unless needed
+
+    try:
+        # Use requests.post with files and data for multipart/form-data
+        response = requests.post("https://api.openai.com/v1/images/edits", headers=headers, files=files, data=data)
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+
+        response_data = response.json()
+
+        # Check response structure (gpt-image-1 specific)
+        if "data" in response_data and len(response_data["data"]) > 0 and "b64_json" in response_data["data"][0]:
+            b64_image_data = response_data["data"][0]["b64_json"]
+            image_bytes = base64.b64decode(b64_image_data)
+            print("--- Image successfully edited ---")
+            # Optionally print usage info if available (gpt-image-1 provides this)
+            if "usage" in response_data:
+                print(f"Image API Usage Info: {response_data['usage']}")
+            return image_bytes, None
+        else:
+            error_msg = "Error: Unexpected Images API (Edit) response format. 'b64_json' not found."
+            print(error_msg)
+            print("Full Response:", json.dumps(response_data, indent=2))
+            return None, error_msg
+
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Error during Images API (Edit) request: {e}"
+        print(error_msg)
+        if e.response is not None:
+            status_code = e.response.status_code
+            print(f"Status Code: {status_code}")
+            # Prepend specific message for potential moderation blocks
+            if status_code == 400:
+                error_msg = f"[Potential Moderation Error] {error_msg}"
+            try:
+                error_details = json.dumps(e.response.json(), indent=2)
+                print("Error Response:", error_details)
+                error_msg += f"\nDetails: {error_details}"
+            except json.JSONDecodeError:
+                error_details = e.response.text
+                print("Error Response (non-JSON):", error_details)
+                error_msg += f"\nDetails: {error_details}"
+        return None, error_msg
+
+    except Exception as e:
+        error_msg = f"An unexpected error occurred during image editing: {e}"
+        print(error_msg)
+        return None, error_msg
+
 
 # --- Character Inference ---
 def infer_characters(story_concept, model="gpt-4o"):

@@ -23,3 +23,6 @@ venv/
 .venv/
 env/
 .env/
+
+# Local prompts file
+prompts.json

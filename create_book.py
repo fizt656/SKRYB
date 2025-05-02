@@ -8,43 +8,10 @@ from openai_api import (
     generate_image_from_prompt,
     infer_characters, # Import the new function
     check_api_key,
-    PROMPTS # Import the loaded prompts
+    PROMPTS, # Import the loaded prompts
+    edit_image_from_prompt # Import the edit function
 )
-
-def sanitize_filename(name):
-    """Removes or replaces characters invalid for filenames/directory names."""
-    name = re.sub(r'[<>:"/\\|?*]', '', name)
-    name = re.sub(r'[\s.,;!]+', '_', name)
-    return name[:100]
-
-def get_user_input(prompt_message, multi_line=False):
-    """Gets input from the user, optionally allowing multi-line."""
-    print(prompt_message)
-    if not multi_line:
-        while True:
-            user_input = input("> ").strip()
-            if user_input:
-                return user_input
-            else:
-                print("Input cannot be empty. Please try again.")
-    else:
-        lines = []
-        print("(Enter 'EOF' on a new line when finished)")
-        while True:
-            try:
-                line = input()
-                if line.strip().upper() == 'EOF':
-                    if lines:
-                        return "\n".join(lines)
-                    else:
-                        print("Input cannot be empty. Please try again.")
-                else:
-                    lines.append(line)
-            except EOFError: # Handle Ctrl+D
-                if lines:
-                    return "\n".join(lines)
-                else:
-                    print("Input cannot be empty. Please try again.")
+from utils import sanitize_filename, get_user_input
 
 def main():
     """Main function to run the two-stage book creation CLI."""
@@ -111,6 +78,22 @@ def main():
         except ValueError:
             print("Invalid input. Please enter a number.")
 
+    # --- Experimental Consistency Mode Option ---
+    print("\nEnable Experimental Consistency Mode? (Uses image editing for pages 1+ using previous image)") # Updated prompt
+    while True:
+        consistency_choice = input("Enter 'yes' or 'no': ").strip().lower()
+        if consistency_choice in ['yes', 'y']:
+            use_experimental_consistency = True
+            print("Experimental Consistency Mode enabled.")
+            break
+        elif consistency_choice in ['no', 'n']:
+            use_experimental_consistency = False
+            print("Experimental Consistency Mode disabled.")
+            break
+        else:
+            print("Invalid choice. Please enter 'yes' or 'no'.")
+
+
     # --- Get Mode-Specific Inputs ---
     if quick_mode:
         story_outline = get_user_input(
@@ -164,6 +147,7 @@ def main():
 
     # --- Generate Cover Image ---
     print("\n--- Running Cover Generation ---")
+    cover_image_data = None # Initialize cover_image_data before the try block
     try:
         cover_template = PROMPTS['cover_image_generation']['prompt_template']
         all_char_details_string = "\n".join([f"- {name}: {desc}" for name, desc in characters.items()])
@@ -184,12 +168,12 @@ def main():
         while cover_error:
             print(f"\n--- Cover Image Generation Failed ---")
             print(f"Error: {cover_error}")
-            print("\n--- Failed Cover Prompt ---")
+            print("\n--- Failed Prompt ---")
             print(cover_prompt)
             print("--------------------------")
 
             try:
-                user_response = input("Enter revised prompt for cover (or type 'SKIP' to skip cover image): ").strip()
+                user_response = get_user_input("Enter revised prompt for cover (or type 'SKIP' to skip cover image): ").strip() # Use get_user_input
             except EOFError:
                 print("\nNo input received, skipping cover image.")
                 user_response = "SKIP" # Treat EOF as skip
@@ -224,10 +208,11 @@ def main():
         print(f"An unexpected error occurred during cover generation: {e}")
 
 
-    # --- Loop through pages, maintaining history ---
+    # --- Loop through pages, maintaining history and potentially previous image ---
     print("\n--- Starting Page Generation ---")
     all_pages_successful = True
     message_history = [] # Initialize empty history
+    previous_page_image_data = None # Initialize variable to store previous image data
 
     for page_num in range(1, total_pages + 1): # Use dynamic total_pages
         progress_percent = int((page_num / total_pages) * 100)
@@ -245,6 +230,12 @@ def main():
         if error1:
             print(f"\nError generating structure for page {page_num}: {error1}")
             all_pages_successful = False
+            # If structure generation fails, we cannot generate an image for this page.
+            # We also cannot provide a previous image for the *next* page if consistency mode is on.
+            # For now, we'll just continue, which means previous_page_image_data won't be updated,
+            # and the next page in consistency mode will likely fail or use an old image.
+            # A more robust approach might involve skipping image generation for the next page too,
+            # or attempting a standard generation if the previous image is missing.
             continue
         if not page_data:
             print(f"\nFailed to generate structure for page {page_num} (no error message).")
@@ -267,8 +258,8 @@ def main():
 
         print(f"--- Stage 1 Success for Page {page_num}. ---")
 
-        # --- Stage 2: Generate Image ---
-        print(f"--- Running Stage 2: Generating Image for Page {page_num}... ---")
+        # --- Stage 2: Generate or Edit Image ---
+        print(f"--- Running Stage 2: Generating/Editing Image for Page {page_num}... ---")
 
         # Find characters mentioned in this scene's description
         mentioned_chars = {
@@ -305,40 +296,84 @@ def main():
              all_pages_successful = False
              continue
 
-        # Generate the image
-        image_data, error2 = generate_image_from_prompt(
-            prompt_text=image_prompt,
-            size="1536x1024", # Keep wide format for pages
-            quality="high"
-        )
+        # --- Generate or Edit Image based on mode and page number ---
+        image_data = None
+        error2 = None
 
-        # --- Interactive Retry Loop for Image Generation Errors ---
+        if use_experimental_consistency:
+            # Use cover image for page 1, previous page image for subsequent pages
+            input_image_for_edit = None
+            if page_num == 1:
+                input_image_for_edit = cover_image_data # Use cover image for the first page
+                if input_image_for_edit:
+                    print(f"--- Using Image Editing (from Cover) for Page {page_num} ---")
+                else:
+                    print(f"Warning: Experimental Consistency mode is on, but cover image data is missing. Falling back to standard generation for page {page_num}.")
+            elif page_num > 1 and previous_page_image_data:
+                input_image_for_edit = previous_page_image_data # Use previous page image
+                print(f"--- Using Image Editing (from Previous Page) for Page {page_num} ---")
+            else:
+                print(f"Warning: Experimental Consistency mode is on, but previous page image data is missing for page {page_num}. Falling back to standard generation.")
+
+            if input_image_for_edit:
+                 image_data, error2 = edit_image_from_prompt(
+                     input_image_for_edit,
+                     prompt_text=image_prompt,
+                     size="1536x1024", # Keep wide format for pages
+                     quality="high"
+                 )
+            else:
+                 # Fallback to standard generation if input image for edit is missing
+                 image_data, error2 = generate_image_from_prompt(
+                     prompt_text=image_prompt,
+                     size="1536x1024", # Keep wide format for pages
+                     quality="high"
+                 )
+        else:
+            # Standard generation mode
+            print(f"--- Using Standard Image Generation for Page {page_num} ---")
+            image_data, error2 = generate_image_from_prompt(
+                prompt_text=image_prompt,
+                size="1536x1024", # Keep wide format for pages
+                quality="high"
+            )
+
+        # --- Interactive Retry Loop for Image Generation/Editing Errors ---
         while error2:
-            print(f"\n--- Image Generation Failed for Page {page_num} ---")
+            print(f"\n--- Image Generation/Editing Failed for Page {page_num} ---")
             print(f"Error: {error2}")
             print("\n--- Failed Prompt ---")
             print(image_prompt)
             print("--------------------")
 
             try:
-                user_response = input("Enter revised prompt (or type 'SKIP' to skip image for this page): ").strip()
+                user_response = get_user_input("Enter revised prompt (or type 'SKIP' to skip image for this page): ").strip() # Use get_user_input
             except EOFError:
                 print("\nNo input received, skipping image for this page.")
                 user_response = "SKIP" # Treat EOF as skip
 
             if user_response.upper() == 'SKIP':
-                print(f"Skipping image generation for page {page_num}.")
+                print(f"Skipping image generation/editing for page {page_num}.")
                 image_data = None # Ensure no image is saved
                 error2 = None # Break the loop
                 all_pages_successful = False # Mark as not fully successful
             else:
-                print("Retrying image generation with revised prompt...")
+                print("Retrying image generation/editing with revised prompt...")
                 image_prompt = user_response # Update the prompt
-                image_data, error2 = generate_image_from_prompt(
-                    prompt_text=image_prompt,
-                    size="1536x1024",
-                    quality="high"
-                )
+                # Retry using the same method (generate or edit) that failed
+                if use_experimental_consistency and input_image_for_edit: # Check if we were attempting edit
+                     image_data, error2 = edit_image_from_prompt(
+                         input_image_for_edit, # Use the same input image as before
+                         prompt_text=image_prompt,
+                         size="1536x1024",
+                         quality="high"
+                     )
+                else: # Otherwise, retry standard generation
+                     image_data, error2 = generate_image_from_prompt(
+                         prompt_text=image_prompt,
+                         size="1536x1024",
+                         quality="high"
+                     )
                 # Loop continues if error2 is still present after retry
 
         # --- Save Image (if successful or not skipped) ---
@@ -349,9 +384,17 @@ def main():
                 with open(output_filename, "wb") as f:
                     f.write(image_data)
                 print(f"--- Stage 2 Success: Page {page_num} image saved successfully as {output_filename} ---")
+
+                # If experimental consistency is on, store this image data for the next page
+                if use_experimental_consistency:
+                    previous_page_image_data = image_data # Store current page's image data
+
             except IOError as e:
                 print(f"Error saving image {output_filename}: {e}")
                 all_pages_successful = False
+                # If saving fails in consistency mode, the next page won't have the previous image.
+                # This is handled by the fallback in the generation/editing logic.
+
         # Optional delay
         # time.sleep(1)
 

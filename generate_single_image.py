@@ -4,6 +4,7 @@ import base64
 import re
 import json
 from dotenv import load_dotenv
+from utils import sanitize_filename
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -24,15 +25,6 @@ def check_api_key():
         print("Please add your API key to the .env file.")
         return False
     return True
-
-def sanitize_filename(name):
-    """Removes or replaces characters invalid for filenames."""
-    # Remove invalid characters
-    name = re.sub(r'[<>:"/\\|?*]', '', name)
-    # Replace whitespace and punctuation with underscores
-    name = re.sub(r'[\s.,;!]+', '_', name)
-    # Truncate to a reasonable length
-    return name[:100]
 
 def generate_image(prompt_text):
     """
