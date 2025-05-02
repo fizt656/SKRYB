@@ -12,6 +12,7 @@ SKRYB uses OpenAI's APIs (Chat Completions and Images) to generate illustrated b
 *   Outputs images to a dedicated directory named after the book title.
 *   Generated images are created with a wide aspect ratio (1536x1024), high quality, and include instructions to the AI to ensure images are uncropped and any rendered text is fully visible.
 *   **Experimental Consistency Mode:** An optional mode that uses the OpenAI Images API's edit endpoint (`/v1/images/edits`) for pages after the cover, using the previous image as a reference to potentially improve character and scene consistency.
+*   **Future Feature: Character Image References:** Planned functionality to allow users to provide image references for characters to improve consistency and customization of character appearance across generated images.
 
 ## Setup
 

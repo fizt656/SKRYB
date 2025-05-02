@@ -41,7 +41,8 @@ def main():
         "2": {"key": "stage2_image_dark_anime", "desc": "Dark Anime SciFi", "type": "narrative"},
         "3": {"key": "stage2_image_dreamy_anime", "desc": "Dreamy Anime", "type": "narrative"},
         "4": {"key": "stage2_image_70s_cartoon", "desc": "70s Funky Cartoon", "type": "narrative"},
-        "5": {"key": "stage2_image_mgs_comic", "desc": "MGS Comic Book Style", "type": "narrative"}
+        "5": {"key": "stage2_image_mgs_comic", "desc": "MGS Comic Book Style", "type": "narrative"},
+        "6": {"key": "stage2_image_cinematic_film_still", "desc": "Realistic Cinematic Film Still", "type": "narrative"} # Added cinematic style
     }
 
     # --- Check Prerequisites ---
