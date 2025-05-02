@@ -8,7 +8,7 @@ SKRYB uses OpenAI's APIs (Chat Completions and Images) to generate illustrated b
 
 *   Generates book pages sequentially, maintaining story context via chat history.
 *   Creates a cover image based on the chosen style and characters.
-*   Supports multiple illustration styles defined in `prompts.json` (e.g., Children's Book, Dark Manga/Anime Comic, 70s Cartoon).
+*   Supports the "Dreamy Childrens Book" illustration style by default, as defined in `prompts.json` (which is based on `prompts_example.json` in the repository).
 *   Outputs images to a dedicated directory named after the book title.
 *   Generated images are created with a wide aspect ratio (1536x1024), high quality, and include instructions to the AI to ensure images are uncropped and any rendered text is fully visible.
 *   **Experimental Consistency Mode:** An optional mode that uses the OpenAI Images API's edit endpoint (`/v1/images/edits`) for pages after the cover, using the previous image as a reference to potentially improve character and scene consistency.
