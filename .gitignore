@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Generated output
+output_books/
+
+
+
+# Cline scratch files
+cline/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS specific files
+.DS_Store
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
