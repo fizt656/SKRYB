@@ -147,17 +147,39 @@ def run_test():
         if not char_details_string:
              char_details_string = "(No specific characters mentioned in scene description)"
 
-        # Format the image prompt using the CHOSEN style template
+        # --- Select and Format Image Prompt based on mode --- # Modified prompt selection logic
+        image_prompt = None
+        error2 = None
+        img_prompt_template = None
+        prompt_template_key = None # Store the key used for the prompt template
+
         try:
-            # Use the key defined at the top of the script
-            img_prompt_template = PROMPTS[CHOSEN_STYLE_KEY]['prompt_template']
+            if use_experimental_consistency:
+                # Use the edit prompt template if consistency is on
+                prompt_template_key = f"{CHOSEN_STYLE_KEY}_edit"
+                img_prompt_template = PROMPTS[prompt_template_key]['prompt_template']
+                print(f"--- Using Edit Prompt Template: {prompt_template_key} ---")
+            else:
+                # Use the standard generation prompt template
+                prompt_template_key = CHOSEN_STYLE_KEY
+                img_prompt_template = PROMPTS[prompt_template_key]['prompt_template']
+                print(f"--- Using Generation Prompt Template: {prompt_template_key} ---")
+
+            # Use the correct text variable (page_text or script_text) based on the key expected by the template
+            # We'll pass both, but the template should only use one ({page_text} or {script_text})
             image_prompt = img_prompt_template.format(
                 scene_description=scene_desc,
                 character_details_string=char_details_string,
-                page_text=page_text
+                page_text=page_text if CHOSEN_STYLE_KEY.endswith('childrens') else "", # Pass relevant text or empty based on original style key
+                script_text=page_text if not CHOSEN_STYLE_KEY.endswith('childrens') else "" # Pass relevant text or empty based on original style key
             )
-        except KeyError:
-            print(f"Error: Could not find '{CHOSEN_STYLE_KEY}' or 'prompt_template' in prompts.json for page {page_num}")
+        except KeyError as e:
+            # Check if the error is due to the template expecting a key that wasn't generated
+            if str(e) == 'page_text' or str(e) == 'script_text': # Check for expected text keys
+                 print(f"Error: Image prompt template '{prompt_template_key}' expects '{{{str(e)}}}' but it was missing in Stage 1 output for page {page_num}.")
+            else:
+                 print(f"Error: Could not find key '{str(e)}' in prompts.json for page {page_num}. Check prompts.json.")
+            print(f"Error: Could not find '{prompt_template_key}' or 'prompt_template' in prompts.json for page {page_num}")
             all_pages_successful = False
             continue
         except Exception as e:
@@ -169,6 +191,7 @@ def run_test():
         image_data = None
         error2 = None
 
+        # Use the result of the CLI prompt (use_experimental_consistency)
         if use_experimental_consistency:
             # Use cover image for page 1, previous page image for subsequent pages
             input_image_for_edit = None
@@ -252,6 +275,7 @@ def run_test():
             try:
                 with open(output_filename, "wb") as f:
                     f.write(image_data)
+                # Changed success message slightly
                 print(f"--- Stage 2 Success: Page {page_num} image saved successfully as {output_filename} ---")
 
                 # If experimental consistency is on, store this image data for the next page

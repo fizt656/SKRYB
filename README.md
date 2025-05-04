@@ -42,7 +42,11 @@ SKRYB uses OpenAI's APIs (Chat Completions and Images) to generate illustrated b
 
 ## Usage
 
-Run the main script:
+SKRYB can be used via the Command-Line Interface (CLI) or the Web Graphical User Interface (GUI).
+
+### Command-Line Interface (CLI)
+
+To use the CLI, run the main script:
 ```bash
 python create_book.py
 ```
@@ -53,11 +57,23 @@ You will be prompted to choose a mode:
 
 Follow the subsequent prompts based on the chosen mode. You will also be asked if you want to enable the Experimental Consistency Mode.
 
-```bash
-python create_book.py
-```
-
 Generated images will be saved in `output_books/<Sanitized_Book_Title>/`.
+
+### Web Graphical User Interface (GUI)
+
+To use the web GUI, you need to run both the backend API and the frontend development server.
+
+1.  **Start the Backend API:** Open a terminal in the project's root directory and run:
+    ```bash
+    uvicorn api:app --reload
+    ```
+2.  **Start the Frontend Development Server:** Open a *new* terminal instance, navigate to the `frontend` directory (`cd frontend`), and run:
+    ```bash
+    npm run dev
+    ```
+    The frontend will typically be available at `http://localhost:5173/`.
+
+Fill out the form in your browser to generate a book. Progress updates will be shown in the backend terminal.
 
 ### Running the Test Script
 
@@ -68,6 +84,10 @@ python test_book_generation.py
 ```
 
 Output will be saved in `output_books/A_Test_Book_featuring_Maz_Baz/`.
+
+## Packaging (Experimental)
+
+An experimental attempt has been made to package the application into a standalone executable using PyInstaller. This feature is still in testing and may not be fully functional or reliable across all environments yet.
 
 ## Customizing Prompts and Styles
 

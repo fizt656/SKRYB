@@ -1,0 +1,20 @@
+/* Basic Dark Mode Styles inspired by SKRYB logo */
+
+:root {
+  --color-background: #1a1a1a; /* Dark background */
+  --color-background-soft: #242424; /* Slightly lighter dark for elements */
+  --color-text: #ffffff; /* White text */
+  --color-heading: #f1c40f; /* Gold inspired by logo */
+  --color-accent: #9b59b6; /* Purple inspired by logo */
+  --color-border: #343434; /* Dark border */
+  --color-border-hover: #4e4e4e; /* Lighter dark border on hover */
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* You can add more specific styles for components here later */

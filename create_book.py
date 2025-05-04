@@ -271,10 +271,36 @@ def main():
         if not char_details_string:
              char_details_string = "(No specific characters mentioned in scene description)"
 
-        # Format the image prompt using the CHOSEN style template
+        # --- Stage 2: Generate or Edit Image ---
+        print(f"--- Running Stage 2: Generating/Editing Image for Page {page_num}... ---")
+
+        # Find characters mentioned in this scene's description
+        mentioned_chars = {
+            name: desc for name, desc in characters.items()
+            if name.lower() in scene_desc.lower()
+        }
+        char_details_string = "\n".join([f"- {name}: {desc}" for name, desc in mentioned_chars.items()])
+        if not char_details_string:
+             char_details_string = "(No specific characters mentioned in scene description)"
+
+        # --- Select and Format Image Prompt based on mode ---
+        image_prompt = None
+        error2 = None
+        img_prompt_template = None
+        prompt_template_key = None # Store the key used for the prompt template
+
         try:
-            # Use the key selected by the user
-            img_prompt_template = PROMPTS[chosen_style['key']]['prompt_template']
+            if use_experimental_consistency:
+                # Use the edit prompt template if consistency is on
+                prompt_template_key = f"{chosen_style['key']}_edit"
+                img_prompt_template = PROMPTS[prompt_template_key]['prompt_template']
+                print(f"--- Using Edit Prompt Template: {prompt_template_key} ---")
+            else:
+                # Use the standard generation prompt template
+                prompt_template_key = chosen_style['key']
+                img_prompt_template = PROMPTS[prompt_template_key]['prompt_template']
+                print(f"--- Using Generation Prompt Template: {prompt_template_key} ---")
+
             # Use the correct text variable (page_text or script_text) based on the key expected by the template
             # We'll pass both, but the template should only use one ({page_text} or {script_text})
             image_prompt = img_prompt_template.format(
@@ -286,10 +312,10 @@ def main():
         except KeyError as e:
             # Check if the error is due to the template expecting a key that wasn't generated
             if str(e) == text_key_for_image:
-                 print(f"Error: Image prompt template '{chosen_style['key']}' expects '{{{text_key_for_image}}}' but it was missing in Stage 1 output for page {page_num}.")
+                 print(f"Error: Image prompt template '{prompt_template_key}' expects '{{{text_key_for_image}}}' but it was missing in Stage 1 output for page {page_num}.")
             else:
                  print(f"Error: Could not find key '{str(e)}' when formatting image prompt for page {page_num}. Check prompts.json.")
-            print(f"Error: Could not find '{chosen_style['key']}' or 'prompt_template' in prompts.json for page {page_num}")
+            print(f"Error: Could not find '{prompt_template_key}' or 'prompt_template' in prompts.json for page {page_num}")
             all_pages_successful = False
             continue
         except Exception as e:
@@ -408,6 +434,9 @@ def main():
         print("Some pages may have encountered errors during generation or saving.")
     print(f"Your book pages are located in: {book_dir}")
     print(f"Total time taken: {end_time - start_time:.2f} seconds")
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
