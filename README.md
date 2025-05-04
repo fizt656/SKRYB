@@ -85,10 +85,6 @@ python test_book_generation.py
 
 Output will be saved in `output_books/A_Test_Book_featuring_Maz_Baz/`.
 
-## Packaging (Experimental)
-
-An experimental attempt has been made to package the application into a standalone executable using PyInstaller. This feature is still in testing and may not be fully functional or reliable across all environments yet.
-
 ## Customizing Prompts and Styles
 
 The `prompts.json` file contains the prompt templates used for text and image generation. For simplicity in the repository, the default `prompts.json` only includes the "Dreamy Childrens Book" style and the necessary base prompts.
