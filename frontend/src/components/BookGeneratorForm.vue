@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
 // Reactive variables for form inputs
 const bookTitle = ref('');
@@ -10,18 +10,35 @@ const characterDescriptions = ref(''); // For Full Mode
 const storyOutline = ref(''); // For both modes
 const useExperimentalConsistency = ref(false);
 
-// Placeholder for available styles (will need to fetch this from backend later)
-const availableStyles = [
-  { key: 'stage2_image_childrens', desc: 'Dreamy Childrens Book' },
-  { key: 'stage2_image_dark_anime', desc: 'Dark Anime SciFi' },
-  { key: 'stage2_image_dreamy_anime', desc: 'Dreamy Anime' },
-  { key: 'stage2_image_70s_cartoon', desc: '70s Funky Cartoon' },
-  { key: 'stage2_image_mgs_comic', desc: 'MGS Comic Book Style' },
-  { key: 'stage2_image_cinematic_film_still', desc: 'Realistic Cinematic Film Still' }
-];
+// Reactive variables for generation status
+const isGenerating = ref(false);
+const generationStatusLog = ref<string[]>([]);
+const generationError = ref('');
+const generationProgress = ref(0);
+
+// Styles will be fetched from the backend
+const availableStyles = ref<{ key: string; desc: string }[]>([]);
+
+// Fetch styles from the backend when the component is mounted
+onMounted(async () => {
+  try {
+    const response = await fetch('http://localhost:8000/api/styles');
+    if (!response.ok) {
+      throw new Error('Failed to fetch styles');
+    }
+    availableStyles.value = await response.json();
+    // Set a default style if available
+    if (availableStyles.value.length > 0) {
+      selectedStyle.value = availableStyles.value[0].key;
+    }
+  } catch (error) {
+    console.error('Error fetching styles:', error);
+    generationError.value = 'Could not load illustration styles from the backend.';
+  }
+});
 
 // Function to handle form submission
-const generateBook = async () => {
+const generateBook = () => {
   const formData = {
     bookTitle: bookTitle.value,
     selectedStyle: selectedStyle.value,
@@ -32,28 +49,73 @@ const generateBook = async () => {
     useExperimentalConsistency: useExperimentalConsistency.value
   };
 
-  try {
-    const response = await fetch('http://localhost:8000/generate-book', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(formData),
-    });
+  // Establish WebSocket connection
+  const websocket = new WebSocket('ws://localhost:8000/ws/generate-progress');
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`HTTP error! status: ${response.status}, Details: ${errorData.detail}`);
+  websocket.onopen = () => {
+    console.log('WebSocket connection established.');
+    isGenerating.value = true;
+    generationStatusLog.value = ['Connecting...'];
+    generationError.value = '';
+    generationProgress.value = 0;
+    // Send form data over WebSocket
+    websocket.send(JSON.stringify(formData));
+    console.log('Form data sent over WebSocket.');
+    generationStatusLog.value = [...generationStatusLog.value, 'Generation request sent...'];
+  };
+
+  websocket.onmessage = (event) => {
+    console.log('Message from backend:', event.data);
+    try {
+      const message = JSON.parse(event.data);
+      const statusMessage = message.message || 'Processing...';
+
+      if (message.status === 'progress' || message.status === 'warning' || message.status === 'complete') {
+        generationStatusLog.value = [...generationStatusLog.value, statusMessage];
+        if (message.percent) {
+          generationProgress.value = message.percent;
+        }
+      } else if (message.status === 'error') {
+        generationError.value = statusMessage;
+        generationStatusLog.value = [...generationStatusLog.value, `Error: ${statusMessage}`];
+        isGenerating.value = false; // Stop on error
+        websocket.close(); // Close connection on error
+      }
+    } catch (e) {
+      console.error('Failed to parse message from backend:', e);
+      const errorMessage = 'Received unreadable message from backend.';
+      generationStatusLog.value = [...generationStatusLog.value, errorMessage];
+      generationError.value = errorMessage;
     }
+  };
 
-    const result = await response.json();
-    console.log('Backend response:', result);
-    alert('Book generation started. Check the backend terminal for progress updates.');
-    // TODO: Handle backend response and show progress/results in the UI
-  } catch (error: any) {
-    console.error('Error sending book generation request:', error);
-    alert(`Error sending book generation request: ${error.message}`);
-  }
+  websocket.onerror = (error) => {
+    console.error('WebSocket error:', error);
+    const errorMessage = 'WebSocket connection error. Check that the backend is running.';
+    generationError.value = errorMessage;
+    generationStatusLog.value = [...generationStatusLog.value, errorMessage];
+    isGenerating.value = false;
+  };
+
+  websocket.onclose = (event) => {
+    console.log('WebSocket connection closed:', event.code, event.reason);
+    isGenerating.value = false;
+    if (event.wasClean && !generationError.value) {
+      // If closed cleanly and no error was set, check the last message
+      const lastStatus = generationStatusLog.value[generationStatusLog.value.length - 1];
+      if (!lastStatus || !lastStatus.toLowerCase().includes('finished')) {
+        generationStatusLog.value = [...generationStatusLog.value, 'Generation complete.'];
+      }
+      console.log('Book generation finished.');
+    } else if (!generationError.value) {
+      // If closed uncleanly but no specific error message was set
+      const errorMessage = `WebSocket closed unexpectedly (Code: ${event.code})`;
+      generationError.value = errorMessage;
+      generationStatusLog.value = [...generationStatusLog.value, errorMessage];
+      console.error('Book generation finished with WebSocket error.');
+    }
+    // If generationError was already set, keep that message.
+  };
 };
 </script>
 
@@ -109,7 +171,21 @@ const generateBook = async () => {
       <label for="experimentalConsistency">Enable Experimental Consistency Mode</label>
     </div>
 
-    <button @click="generateBook" class="generate-button">Generate Book</button>
+    <button @click="generateBook" class="generate-button" :disabled="isGenerating">
+      {{ isGenerating ? 'Generating...' : 'Generate Book' }}
+    </button>
+
+    <div v-if="generationStatusLog.length > 0 || generationError" class="status-area">
+      <div class="status-log">
+        <p v-for="(status, index) in generationStatusLog" :key="index" :class="{ 'error-text': status.toLowerCase().includes('error') }">
+          {{ status }}
+        </p>
+      </div>
+      <p v-if="generationError" class="error-text">Error: {{ generationError }}</p>
+      <div class="progress-bar-container" v-if="isGenerating && generationProgress > 0">
+        <div class="progress-bar" :style="{ width: generationProgress + '%' }"></div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -189,6 +265,57 @@ const generateBook = async () => {
 .generate-button:hover {
   background-color: #ffda6a; /* Lighter yellow on hover */
   box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4); /* Subtle glow effect */
+}
+
+.generate-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.status-area {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.status-log {
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background-color: var(--color-background-mute);
+}
+
+.status-log p {
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.status-log p:last-child {
+  margin-bottom: 0;
+}
+
+.error-text {
+  color: #dc3545; /* Bootstrap danger color */
+  font-weight: bold;
+}
+
+.progress-bar-container {
+  width: 100%;
+  background-color: var(--color-border);
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.progress-bar {
+  height: 10px;
+  background-color: #ffc107;
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
 }
 
 /* Basic dark mode adjustments (inherits from global styles) */
