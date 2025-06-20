@@ -6,9 +6,14 @@ const bookTitle = ref('');
 const selectedStyle = ref(''); // Will store the key of the selected style
 const numberOfPages = ref(10); // Default to 10 pages
 const quickMode = ref(true); // Default to Quick Mode
-const characterDescriptions = ref(''); // For Full Mode
 const storyOutline = ref(''); // For both modes
 const useExperimentalConsistency = ref(false);
+const characters = ref<{ name: string; description: string }[]>([
+  { name: '', description: '' },
+]); // For Full Mode
+const modelSelection = ref('openai'); // New: 'openai' or 'replicate'
+const referenceImageFile = ref<File | null>(null); // New: For the uploaded image file
+const safetyTolerance = ref(6); // New: For Replicate safety tolerance
 
 // Reactive variables for generation status
 const isGenerating = ref(false);
@@ -37,91 +42,160 @@ onMounted(async () => {
   }
 });
 
+// Function to handle file upload
+const handleFileUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    referenceImageFile.value = target.files[0];
+  } else {
+    referenceImageFile.value = null;
+  }
+};
+
+// Function to add a new character
+const addCharacter = () => {
+  characters.value.push({ name: '', description: '' });
+};
+
+// Function to remove a character
+const removeCharacter = (index: number) => {
+  characters.value.splice(index, 1);
+};
+
 // Function to handle form submission
 const generateBook = () => {
-  const formData = {
-    bookTitle: bookTitle.value,
-    selectedStyle: selectedStyle.value,
-    numberOfPages: numberOfPages.value,
-    quickMode: quickMode.value,
-    characterDescriptions: quickMode.value ? null : characterDescriptions.value, // Send null if in Quick Mode
-    storyOutline: storyOutline.value,
-    useExperimentalConsistency: useExperimentalConsistency.value
-  };
+  const reader = new FileReader();
 
-  // Establish WebSocket connection
-  const websocket = new WebSocket('ws://localhost:8000/ws/generate-progress');
+  const sendData = (referenceImageData: string | null) => {
+    // Convert characters array to JSON string for the backend
+    const characterDescriptionsJSON = quickMode.value
+      ? null
+      : JSON.stringify(
+          Object.fromEntries(
+            characters.value.map((char) => [char.name, char.description])
+          )
+        );
 
-  websocket.onopen = () => {
-    console.log('WebSocket connection established.');
-    isGenerating.value = true;
-    generationStatusLog.value = ['Connecting...'];
-    generationError.value = '';
-    generationProgress.value = 0;
-    // Send form data over WebSocket
-    websocket.send(JSON.stringify(formData));
-    console.log('Form data sent over WebSocket.');
-    generationStatusLog.value = [...generationStatusLog.value, 'Generation request sent...'];
-  };
+    const formData = {
+      bookTitle: bookTitle.value,
+      selectedStyle: selectedStyle.value,
+      numberOfPages: numberOfPages.value,
+      quickMode: quickMode.value,
+      characterDescriptions: characterDescriptionsJSON,
+      storyOutline: storyOutline.value,
+      useExperimentalConsistency: useExperimentalConsistency.value,
+      modelSelection: modelSelection.value,
+      referenceImage: referenceImageData,
+      safetyTolerance: safetyTolerance.value,
+    };
 
-  websocket.onmessage = (event) => {
-    console.log('Message from backend:', event.data);
-    try {
-      const message = JSON.parse(event.data);
-      const statusMessage = message.message || 'Processing...';
+    // Establish WebSocket connection
+    const websocket = new WebSocket('ws://localhost:8000/ws/generate-progress');
 
-      if (message.status === 'progress' || message.status === 'warning' || message.status === 'complete') {
-        generationStatusLog.value = [...generationStatusLog.value, statusMessage];
-        if (message.percent) {
-          generationProgress.value = message.percent;
+    websocket.onopen = () => {
+      console.log('WebSocket connection established.');
+      isGenerating.value = true;
+      generationStatusLog.value = ['Connecting...'];
+      generationError.value = '';
+      generationProgress.value = 0;
+      // Send form data over WebSocket
+      websocket.send(JSON.stringify(formData));
+      console.log('Form data sent over WebSocket.');
+      generationStatusLog.value = [...generationStatusLog.value, 'Generation request sent...'];
+    };
+
+    websocket.onmessage = (event) => {
+      console.log('Message from backend:', event.data);
+      try {
+        const message = JSON.parse(event.data);
+        const statusMessage = message.message || 'Processing...';
+
+        if (message.status === 'progress' || message.status === 'warning' || message.status === 'complete') {
+          generationStatusLog.value = [...generationStatusLog.value, statusMessage];
+          if (message.percent) {
+            generationProgress.value = message.percent;
+          }
+        } else if (message.status === 'error') {
+          generationError.value = statusMessage;
+          generationStatusLog.value = [...generationStatusLog.value, `Error: ${statusMessage}`];
+          isGenerating.value = false; // Stop on error
+          websocket.close(); // Close connection on error
         }
-      } else if (message.status === 'error') {
-        generationError.value = statusMessage;
-        generationStatusLog.value = [...generationStatusLog.value, `Error: ${statusMessage}`];
-        isGenerating.value = false; // Stop on error
-        websocket.close(); // Close connection on error
+      } catch (e) {
+        console.error('Failed to parse message from backend:', e);
+        const errorMessage = 'Received unreadable message from backend.';
+        generationStatusLog.value = [...generationStatusLog.value, errorMessage];
+        generationError.value = errorMessage;
       }
-    } catch (e) {
-      console.error('Failed to parse message from backend:', e);
-      const errorMessage = 'Received unreadable message from backend.';
-      generationStatusLog.value = [...generationStatusLog.value, errorMessage];
-      generationError.value = errorMessage;
-    }
-  };
+    };
 
-  websocket.onerror = (error) => {
-    console.error('WebSocket error:', error);
-    const errorMessage = 'WebSocket connection error. Check that the backend is running.';
-    generationError.value = errorMessage;
-    generationStatusLog.value = [...generationStatusLog.value, errorMessage];
-    isGenerating.value = false;
-  };
-
-  websocket.onclose = (event) => {
-    console.log('WebSocket connection closed:', event.code, event.reason);
-    isGenerating.value = false;
-    if (event.wasClean && !generationError.value) {
-      // If closed cleanly and no error was set, check the last message
-      const lastStatus = generationStatusLog.value[generationStatusLog.value.length - 1];
-      if (!lastStatus || !lastStatus.toLowerCase().includes('finished')) {
-        generationStatusLog.value = [...generationStatusLog.value, 'Generation complete.'];
-      }
-      console.log('Book generation finished.');
-    } else if (!generationError.value) {
-      // If closed uncleanly but no specific error message was set
-      const errorMessage = `WebSocket closed unexpectedly (Code: ${event.code})`;
+    websocket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      const errorMessage = 'WebSocket connection error. Check that the backend is running.';
       generationError.value = errorMessage;
       generationStatusLog.value = [...generationStatusLog.value, errorMessage];
-      console.error('Book generation finished with WebSocket error.');
-    }
-    // If generationError was already set, keep that message.
+      isGenerating.value = false;
+    };
+
+    websocket.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.code, event.reason);
+      isGenerating.value = false;
+      if (event.wasClean && !generationError.value) {
+        // If closed cleanly and no error was set, check the last message
+        const lastStatus = generationStatusLog.value[generationStatusLog.value.length - 1];
+        if (!lastStatus || !lastStatus.toLowerCase().includes('finished')) {
+          generationStatusLog.value = [...generationStatusLog.value, 'Generation complete.'];
+        }
+        console.log('Book generation finished.');
+      } else if (!generationError.value) {
+        // If closed uncleanly but no specific error message was set
+        const errorMessage = `WebSocket closed unexpectedly (Code: ${event.code})`;
+        generationError.value = errorMessage;
+        generationStatusLog.value = [...generationStatusLog.value, errorMessage];
+        console.error('Book generation finished with WebSocket error.');
+      }
+      // If generationError was already set, keep that message.
+    };
   };
+
+  if (modelSelection.value === 'replicate' && referenceImageFile.value) {
+    reader.onload = (e) => {
+      const imageDataUrl = e.target?.result as string;
+      sendData(imageDataUrl);
+    };
+    reader.readAsDataURL(referenceImageFile.value);
+  } else {
+    sendData(null);
+  }
 };
 </script>
 
 <template>
   <div class="book-generator-form">
     <h2 class="form-title">Generate Your Book</h2>
+
+    <div class="form-group">
+      <label>Image Generation Model:</label>
+      <div class="radio-group">
+        <label>
+          <input type="radio" value="openai" v-model="modelSelection" /> OpenAI GPT Image-1
+        </label>
+        <label>
+          <input type="radio" value="replicate" v-model="modelSelection" /> Replicate FLUX Kontext
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group" v-if="modelSelection === 'replicate'">
+      <label for="referenceImage">Reference Image (Optional):</label>
+      <input type="file" id="referenceImage" @change="handleFileUpload" accept="image/*" />
+    </div>
+
+    <div class="form-group" v-if="modelSelection === 'replicate'">
+      <label for="safetyTolerance">Safety Tolerance (0-6):</label>
+      <input type="range" id="safetyTolerance" min="0" max="6" v-model.number="safetyTolerance" />
+      <span>{{ safetyTolerance }}</span>
+    </div>
 
     <div class="form-group">
       <label for="bookTitle">Book Title:</label>
@@ -147,18 +221,22 @@ const generateBook = () => {
       <label>Generation Mode:</label>
       <div class="radio-group">
         <label>
-          <input type="radio" value="true" v-model="quickMode" /> Quick Mode
+          <input type="radio" :value="true" v-model="quickMode" /> Quick Mode
         </label>
         <label>
-          <input type="radio" value="false" v-model="quickMode" /> Full Mode
+          <input type="radio" :value="false" v-model="quickMode" /> Full Mode
         </label>
       </div>
     </div>
 
     <div class="form-group" v-if="!quickMode">
-      <label for="characterDescriptions">Character Descriptions (JSON format):</label>
-      <textarea id="characterDescriptions" v-model="characterDescriptions" rows="4"></textarea>
-      <small>Example: {"Character Name": "Description", "Another Character": "Description"}</small>
+      <label>Character Descriptions:</label>
+      <div v-for="(character, index) in characters" :key="index" class="character-entry">
+        <input type="text" placeholder="Character Name" v-model="character.name" class="char-name-input" />
+        <input type="text" placeholder="Character Description" v-model="character.description" class="char-desc-input" />
+        <button @click="removeCharacter(index)" class="remove-char-button" type="button">-</button>
+      </div>
+      <button @click="addCharacter" class="add-char-button" type="button">Add Character</button>
     </div>
 
     <div class="form-group">
@@ -231,6 +309,41 @@ const generateBook = () => {
 
 .form-group textarea {
   resize: vertical; /* Allow vertical resizing */
+}
+
+.character-entry {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.char-name-input {
+  flex: 1;
+}
+
+.char-desc-input {
+  flex: 3;
+}
+
+.remove-char-button,
+.add-char-button {
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.remove-char-button {
+  background-color: #dc3545;
+  color: white;
+}
+
+.add-char-button {
+  background-color: #28a745;
+  color: white;
+  margin-top: 0.5rem;
 }
 
 .radio-group label {

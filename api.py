@@ -17,6 +17,7 @@ from openai_api import (
     PROMPTS,
     edit_image_from_prompt
 )
+from replicate_api import generate_image_with_replicate, check_replicate_api_key
 from utils import sanitize_filename # Assuming sanitize_filename is needed
 
 # Define a request body model
@@ -28,6 +29,9 @@ class BookGenerationRequest(BaseModel):
     characterDescriptions: str | None = None # Optional for Quick Mode
     storyOutline: str
     useExperimentalConsistency: bool
+    modelSelection: str
+    referenceImage: str | None = None
+    safetyTolerance: int | None = None
 
 app = FastAPI()
 
@@ -86,8 +90,11 @@ async def websocket_endpoint(websocket: WebSocket):
         # --- Adapt Logic from create_book.py main function ---
 
         # Check API Key and Prompts
-        if not check_api_key():
+        if request.modelSelection == 'openai' and not check_api_key():
             await websocket.send_text(json.dumps({"status": "error", "message": "OpenAI API key not configured."}))
+            return
+        if request.modelSelection == 'replicate' and not check_replicate_api_key():
+            await websocket.send_text(json.dumps({"status": "error", "message": "Replicate API key not configured."}))
             return
         if not PROMPTS:
             await websocket.send_text(json.dumps({"status": "error", "message": "Could not load prompts from prompts.json."}))
@@ -153,11 +160,18 @@ async def websocket_endpoint(websocket: WebSocket):
                     book_title=request.bookTitle,
                     style_description=request.selectedStyle
                 )
-                cover_image_data, cover_error = generate_image_from_prompt(
-                    prompt_text=cover_prompt,
-                    size="1536x1024",
-                    quality="high"
-                )
+                if request.modelSelection == 'replicate':
+                    cover_image_data, cover_error = generate_image_with_replicate(
+                        prompt_text=cover_prompt,
+                        input_image=request.referenceImage,
+                        safety_tolerance=request.safetyTolerance
+                    )
+                else:
+                    cover_image_data, cover_error = generate_image_from_prompt(
+                        prompt_text=cover_prompt,
+                        size="1536x1024",
+                        quality="high"
+                    )
                 if cover_error:
                     print(f"Error generating cover image: {cover_error}")
                     await websocket.send_text(json.dumps({"status": "warning", "message": f"Error generating cover: {cover_error}. Skipping cover."}))
@@ -273,7 +287,18 @@ async def websocket_endpoint(websocket: WebSocket):
             image_data = None
             error2 = None
 
-            if request.useExperimentalConsistency and page_num > 0 and previous_page_image_data:
+            if request.modelSelection == 'replicate':
+                print(f"--- Using Replicate Image Generation for Page {page_num} ---")
+                image_data, error2 = generate_image_with_replicate(
+                    prompt_text=image_prompt,
+                    input_image=request.referenceImage,
+                    safety_tolerance=request.safetyTolerance
+                )
+                if error2:
+                    print(f"Error during Replicate image generation for page {page_num}: {error2}")
+                    await websocket.send_text(json.dumps({"status": "warning", "message": f"Replicate image generation failed for page {page_num}: {error2}. Skipping image."}))
+                    image_data = None
+            elif request.useExperimentalConsistency and page_num > 0 and previous_page_image_data:
                 print(f"--- Using Image Editing for Page {page_num} ---")
                 image_data, error2 = edit_image_from_prompt(
                     previous_page_image_data,
