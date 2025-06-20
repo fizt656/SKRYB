@@ -8,12 +8,12 @@ SKRYB uses OpenAI's and Replicate's APIs to generate illustrated books based on 
 
 *   Generates book pages sequentially, maintaining story context.
 *   Creates a cover image based on the chosen style and characters.
-*   **Dual AI Model Support**: Choose between OpenAI's DALL-E 3 and Replicate's FLUX model for image generation.
+*   **Dual AI Model Support**: Choose between OpenAI's Image-1 and Replicate's FLUX model for image generation.
 *   **Dynamic Character Entry**: A user-friendly interface in "Full Mode" to easily add, edit, and remove characters without needing to write JSON.
 *   **Experimental Style Reference**: When using the Replicate model, you can upload an image to be used as a style reference for the entire book.
 *   **Replicate Safety Control**: Adjust the `safety_tolerance` for the Replicate model directly in the UI.
-*   **Experimental Consistency Mode (OpenAI)**: An optional mode that uses the OpenAI Images API's edit endpoint for potentially better page-to-page consistency.
-*   **Future Feature: Character Image References:** A more advanced system to allow users to provide specific image references for each character is planned for a future update.
+*   **Experimental Consistency Mode (OpenAI)**: An optional mode that uses the OpenAI Images API's edit endpoint for potentially better page-to-page consistency (so far it's a too strict to be usable for general style consistency, as it retains the composition of the reference).
+*   **Future Feature: Character Image References:** A more advanced system to allow users to provide specific image references for each character using Flux Kontext might be a good idea later (right now it might be working for style, but not character consistency).
 
 ## Setup
 
@@ -72,5 +72,3 @@ Once you click "Generate Book," you can monitor the progress in the status log a
 ## License
 
 This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License. See the [LICENSE](LICENSE) file for details.
-
-This means you are free to use, share, and adapt the software for any non-commercial purpose, as long as you provide attribution. If you wish to use this software for commercial purposes, please contact the repository owner to arrange a separate commercial license.
