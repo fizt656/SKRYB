@@ -19,8 +19,7 @@ SKRYB uses OpenAI's and Replicate's APIs to generate illustrated books based on 
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone https://github.com/fizt656/SKRYB/
     ```
 2.  **Create and activate a virtual environment:**
     ```bash
