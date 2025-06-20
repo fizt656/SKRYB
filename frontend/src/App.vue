@@ -8,7 +8,6 @@
   <div id="app">
     <header class="app-header">
       <img alt="SKRYB Logo" class="logo" src="/skryb_logo.png" />
-      <h1>SKRYB Book Generator</h1>
     </header>
 
     <main class="app-main">
@@ -40,13 +39,7 @@
 }
 
 .app-header .logo {
-  height: 50px; /* Adjust size as needed */
-  margin-right: 1rem;
-}
-
-.app-header h1 {
-  color: var(--color-heading);
-  font-size: 1.5rem;
+  height: 150px; /* Adjust size as needed */
 }
 
 .app-main {

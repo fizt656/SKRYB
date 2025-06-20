@@ -172,8 +172,6 @@ const generateBook = () => {
 
 <template>
   <div class="book-generator-form">
-    <h2 class="form-title">Generate Your Book</h2>
-
     <div class="form-group">
       <label>Image Generation Model:</label>
       <div class="radio-group">
@@ -365,8 +363,8 @@ const generateBook = () => {
   display: block;
   width: 100%;
   padding: 1rem;
-  background-color: #ffc107; /* Warm yellow from logo */
-  color: #333; /* Dark text for contrast */
+  background-color: #00A9E0; /* Bright Blue from logo */
+  color: white;
   border: none;
   border-radius: 4px;
   font-size: 1.1rem;
@@ -376,8 +374,8 @@ const generateBook = () => {
 }
 
 .generate-button:hover {
-  background-color: #ffda6a; /* Lighter yellow on hover */
-  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4); /* Subtle glow effect */
+  background-color: #00C2B8; /* Turquoise from logo */
+  box-shadow: 0 4px 12px rgba(0, 194, 184, 0.4); /* Subtle glow effect */
 }
 
 .generate-button:disabled {
@@ -426,7 +424,7 @@ const generateBook = () => {
 
 .progress-bar {
   height: 10px;
-  background-color: #ffc107;
+  background-color: #00A9E0; /* Bright Blue from logo */
   border-radius: 4px;
   transition: width 0.3s ease-in-out;
 }
